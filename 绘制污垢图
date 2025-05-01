@@ -1,0 +1,99 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
+from matplotlib.lines import Line2D
+
+# 加载数据
+file_path = r"C:\Users\lenovo\Desktop\新建文件夹\毕业论文\小论文2\故障模拟数据\Indicator diagram during air filter faults (2).csv"
+data = pd.read_csv(file_path)
+data.columns = ['x1', 'y1', 'x2', 'y2', 'x3', 'y3']
+
+# 插值处理函数
+def interpolate_data(x, y, num_points=10000):
+    f = interp1d(x, y, kind='linear', fill_value="extrapolate")
+    x_new = np.linspace(min(x), max(x), num_points)
+    return x_new, f(x_new)
+
+x1_new, y1_new = interpolate_data(data['x1'], data['y1'])
+x2_new, y2_new = interpolate_data(data['x2'], data['y2'])
+x3_new, y3_new = interpolate_data(data['x3'], data['y3'], 10000)
+
+# 可视化参数设置
+colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+linestyles = ['-', '--', '-.']
+plt.figure(figsize=(12, 7))
+
+def smooth_weight(x, center=0, sigma=50):
+    """基于高斯分布的连续权重函数"""
+    return np.exp(-(x - center)**2 / (2*sigma**2))
+
+# 绘制原始曲线（0%污垢）
+plt.plot(x1_new, y1_new, color=colors[0], linestyle=linestyles[0], label='_nolegend_')
+plt.plot(x2_new, y2_new, color=colors[0], linestyle=linestyles[1], label='_nolegend_')
+plt.plot(x3_new, y3_new, color=colors[0], linestyle=linestyles[2], label='_nolegend_')
+
+# 绘制工况1偏移曲线（水平偏移）
+def generate_noise(x, scale=1.0, length_scale=30):
+    """生成与位置相关的平滑随机噪声"""
+    np.random.seed(int(abs(sum(x))%1000))  # 基于坐标的位置相关随机种子
+    n_points = len(x)
+    # 生成低频噪声
+    noise = np.random.normal(0, scale, n_points//length_scale + 1)
+    x_interp = np.linspace(min(x), max(x), n_points//length_scale + 1)
+    f = interp1d(x_interp, noise, kind='linear', fill_value="extrapolate")
+    return f(x) * smooth_weight(x, sigma=80)  # 噪声在中间区域更明显
+
+# 修改工况1偏移（水平方向）
+for i in range(1, 5):
+    weights = smooth_weight(x1_new)
+    # 基础偏移 + 位置相关噪声
+    noise = generate_noise(x1_new, scale=0.2*i, length_scale=40) 
+    offset_x = x1_new - 1*i*weights*(1 + 0.1*np.sin(x1_new/50)) + noise
+    plt.plot(offset_x, y1_new, color=colors[i], 
+             linestyle=linestyles[0], alpha=0.8)
+
+# 修改工况3偏移（垂直方向）
+for i in range(1, 5):
+    weights = smooth_weight(x3_new)
+    # 基础偏移 + 多频噪声
+    base_offset = 20*i*weights
+    noise_low = generate_noise(x3_new, scale=0.8*i, length_scale=60)
+    noise_high = np.random.normal(0, 0.3*i, len(x3_new))
+    offset_y = y3_new + base_offset + noise_low + noise_high*weights
+    plt.plot(x3_new, offset_y, color=colors[i],
+             linestyle=linestyles[1], alpha=0.8)
+
+# 修改工况2偏移（混合方向）
+for i in range(1, 5):
+    weights = smooth_weight(x2_new, sigma=40)
+    # 非线性偏移 + 相关性扰动
+    angle_effect = np.sin(np.radians(x2_new/2))  # 周期为720度的正弦影响
+    noise_x = generate_noise(x2_new, scale=0.3*i, length_scale=50)
+    noise_y = generate_noise(x2_new, scale=0.5*i, length_scale=70)
+    
+    offset_x = x2_new - 1*i*weights*(1 + 0.05*angle_effect) + noise_x
+    offset_y = y2_new + 1*i*weights*(1 + 0.1*np.cos(np.radians(x2_new))) + noise_y
+    plt.plot(offset_x, offset_y, color=colors[i],
+             linestyle=linestyles[2], alpha=0.8)
+
+# 坐标轴设置
+plt.xlim(-180, 180)
+plt.ylim(0, 220)
+plt.title('Smooth Transition Indicator Diagram with Air Filter Fouling')
+plt.xlabel('Crank Angle (degrees)')
+plt.ylabel('Cylinder Pressure (kPa)')
+plt.grid(True)
+
+# 创建组合图例
+legend_elements = [
+    *[Line2D([0], [0], color=c, lw=2, label=f'{i*10}%') for i, c in enumerate(colors)],
+    Line2D([0], [0], color='k', linestyle=linestyles[0], label='Intake Phase'),
+    Line2D([0], [0], color='k', linestyle=linestyles[1], label='Compression Phase'),
+    Line2D([0], [0], color='k', linestyle=linestyles[2], label='Power Phase')
+]
+
+plt.legend(handles=legend_elements, ncol=3, loc='upper center',
+           bbox_to_anchor=(0.5, -0.12), frameon=True)
+plt.tight_layout()
+plt.show()
