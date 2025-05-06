@@ -72,7 +72,7 @@ for i in range(1, 5):
 # 示功图曲线（点划线）------------------------------------------
 for i in range(1, 5):
     weights = smooth_weight(x3_new)
-    base_offset = 20*i*weights
+    base_offset = 9*i*weights
     noise_low = generate_noise(x3_new, scale=0.8*i, length_scale=60)
     noise_high = np.random.normal(0, 0.3*i, len(x3_new))
     offset_y = y3_new + base_offset + noise_low + noise_high*weights
@@ -173,8 +173,11 @@ def generate_noise(x, scale=1.0, length_scale=30):
 
 # 燃烧速率曲线（实线）---------------------------------------------
 for i in range(1, 5):
-    weights = smooth_weight(x1_new)
-    noise = generate_noise(x1_new, scale=0.2*i, length_scale=40)
+    # 调整sigma为30，使权重在中间更集中，两端衰减更快
+    weights = smooth_weight(x1_new, sigma=20)
+    # 生成噪声并乘以weights，抑制两端噪声
+    noise = generate_noise(x1_new, scale=0.2*i, length_scale=40) * weights
+    # 计算偏移量，确保两端受权重约束
     offset_y = y1_new + 4 * i * weights * (1 + 0.15 * np.sin(x1_new / 50)) + noise
     plt.plot(x1_new, offset_y, color=colors[i], 
              linestyle=linestyles[0], linewidth=linewidth, alpha=0.8)
